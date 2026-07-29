@@ -100,5 +100,5 @@ def load_baseline_model(model_path: str = config.BASELINE_MODEL_PATH):
     """Load a saved baseline model."""
     path = model_path + "/best_model.keras"
     model = tf.keras.models.load_model(path)
-    print(f"Baseline model loaded ← {path}")
+    print(f"Baseline model loaded <- {path}")
     return model

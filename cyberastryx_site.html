@@ -446,6 +446,7 @@ document.querySelectorAll('.demo-tab').forEach(function(t) {
 });
 
 var API = 'http://127.0.0.1:8000';
+var API_KEY = 'YOUR_API_KEY_HERE'; // paste a key from spam_detection/api_keys.json (generate one with generate_key.py)
 
 document.getElementById('demoTextBtn').addEventListener('click', function() { demoScan('text'); });
 document.getElementById('demoLinkBtn').addEventListener('click', function() { demoScan('link'); });
@@ -454,13 +455,13 @@ document.getElementById('demoImageBtn').addEventListener('click', function() { d
 async function demoScan(type) {
   var res = document.getElementById('demo-result');
   var body, endpoint;
-  if (type === 'text')  { var v = document.getElementById('d-text').value.trim(); if(!v)return; body={text:v}; endpoint='/predict'; }
+  if (type === 'text')  { var v = document.getElementById('d-text').value.trim(); if(!v)return; body={text:v}; endpoint='/v1/classify'; }
   else if(type === 'link') { var v = document.getElementById('d-link').value.trim(); if(!v)return; body={url:v}; endpoint='/v1/check-link'; }
   else { var v = document.getElementById('d-image').value.trim(); if(!v)return; body={url:v}; endpoint='/v1/check-image'; }
   res.style.display='block';
   res.innerHTML='<span style="color:var(--muted)">Scanning…</span>';
   try {
-    var r = await fetch(API + endpoint, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    var r = await fetch(API + endpoint, {method:'POST', headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + API_KEY}, body:JSON.stringify(body)});
     if(!r.ok) throw new Error('HTTP '+r.status);
     renderDemo(res, await r.json());
   } catch(e) {

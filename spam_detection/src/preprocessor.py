@@ -107,7 +107,7 @@ class SpamTokenizer:
         obj = cls()
         obj.tokenizer = tokenizer_from_json(tokenizer_json)
         obj.fitted = True
-        print(f"Tokenizer loaded ← {path}")
+        print(f"Tokenizer loaded <- {path}")
         return obj
 
     @property

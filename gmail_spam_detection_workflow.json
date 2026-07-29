@@ -1,0 +1,600 @@
+{
+  "name": "Gmail Spam Detection",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {
+          "includeSpamTrash": false,
+          "labelIds": [
+            "INBOX"
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        592
+      ],
+      "id": "480818a5-421f-4858-ba57-bb7079c193d3",
+      "name": "Gmail Trigger",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "VIL8CE6Eem1JGNBo",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "messageId": "={{$json.id}}"
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        496,
+        624
+      ],
+      "id": "0b047b2c-3602-408f-9c6c-9d6bf2bcf4ad",
+      "name": "Get a message",
+      "webhookId": "99993422-54b1-4ce2-9b75-136a8fd824c8",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "VIL8CE6Eem1JGNBo",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"id\": \"{{ $json.id }}\",\n  \"threadId\": \"{{ $json.threadId }}\",\n  \"subject\": \"{{ ($json.Subject || '').replace(/\"/g, \"'\") }}\",\n  \"from\": \"{{ ($json.From || '').replace(/\"/g, \"'\") }}\",\n  \"snippet\": \"{{ ($json.snippet || '').replace(/\"/g, \"'\").slice(0, 300) }}\",\n  \"internalDate\": \"{{ $json.internalDate }}\",\n  \"gmailCategory\": \"{{ ($json.labels || []).map(l => l.id).filter(i => i.indexOf('CATEGORY_') === 0).join(',') }}\",\n  \"isNoReply\": \"{{ /no-?reply|noreply|notifications?@|updates?@|hello@|info@/i.test($json.From || '') }}\",\n  \"emailText\": \"Subject: {{ ($json.Subject || '').replace(/\"/g, \"'\") }} From: {{ ($json.From || '').replace(/\"/g, \"'\") }} {{ ($json.snippet || '').replace(/\"/g, \"'\").slice(0, 2000) }}\"\n}",
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        704,
+        752
+      ],
+      "id": "22bde46f-7c75-417c-ad0c-e36ef99d4e57",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/v1/classify",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: $json.emailText }) }}",
+        "options": {
+          "response": {
+            "response": {}
+          },
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1248,
+        432
+      ],
+      "id": "fc8bb61d-d70c-4e49-ae52-dae2b25fdd9a",
+      "name": "Classify Email",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "JOhA14fvHQQt4THX",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1648,
+        640
+      ],
+      "id": "e10f157c-5614-4834-8e09-1476e8eccab1",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "030c7c0c-163b-4ee2-8b72-442ada8588b5",
+              "leftValue": "={{ (() => { const m = $json; const src = $('Edit Fields').item.json; const cat = src.gmailCategory || ''; const bulk = String(src.isNoReply) === 'true'; const legit = cat.length > 0 && bulk; return m.label === \"SPAM\" && m.confidence >= 0.85 && !(legit && m.spam_prob < 0.99) && $execution.mode !== 'webhook'; })() }}",
+              "rightValue": "=true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "3dd0ebe6-6eff-45e6-a35e-87377fda0836",
+              "leftValue": "={{ $('Webhook').isExecuted }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2272,
+        688
+      ],
+      "id": "dff00cce-cbb6-4345-a312-e6214c17a956",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $('Edit Fields').item.json.id }}",
+        "labelIds": [
+          "SPAM"
+        ]
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2432,
+        576
+      ],
+      "id": "b95f338e-a131-40d6-b5ea-ddeeeadd23fb",
+      "name": "Add label to message",
+      "webhookId": "303e5fc8-c2e5-4855-8eac-7ddf3309627d",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "VIL8CE6Eem1JGNBo",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "removeLabels",
+        "messageId": "={{ $('Edit Fields').item.json.id }}",
+        "labelIds": [
+          "INBOX"
+        ]
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2816,
+        496
+      ],
+      "id": "34967a35-01e3-42c5-b825-35f618d0653c",
+      "name": "Remove label from message",
+      "webhookId": "4cba0b7e-4ca1-4ccf-9a20-327a8db9320b",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "VIL8CE6Eem1JGNBo",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $('Edit Fields').item.json.id }}",
+        "labelIds": [
+          "INBOX"
+        ]
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2640,
+        832
+      ],
+      "id": "1423d171-477e-4558-bd6c-f00ed2890da5",
+      "name": "Add label to message1",
+      "webhookId": "2d73577b-daaf-4e29-9969-30067949feba",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "VIL8CE6Eem1JGNBo",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map((item, i) => {\n  const j = item.json;\n  const text = (j.snippet || '') + ' ' + (j.emailText || '') + ' ' + (j.subject || '');\n  const urls = [...text.matchAll(/https?:\\/\\/[^\\s\"'<>\\)]+/g)].map(m => m[0]);\n  const unique = [...new Set(urls)].slice(0, 3);\n\n  return {\n    json: {\n      id: j.id || '',\n      url: unique[0] || null,\n      urls: unique,\n      urlCount: unique.length,\n      skipped: unique.length === 0\n    },\n    pairedItem: { item: i }\n  };\n});"
+      },
+      "id": "6efd3e42-b688-42e1-90b7-42b034804064",
+      "name": "Extract URLs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/v1/check-link",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.skipped ? JSON.stringify({url: \"http://skip\", skipped: true}) : JSON.stringify({url: $json.url}) }}",
+        "options": {
+          "response": {
+            "response": {}
+          },
+          "timeout": 15000
+        }
+      },
+      "id": "f39b931c-2658-4dec-96d0-f70db3511160",
+      "name": "Check Link",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1104,
+        816
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "JOhA14fvHQQt4THX",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\n// If previous step was skipped, pass skip forward\nif (item.skipped) {\n  return [{ json: { image_url: null, skipped: true } }];\n}\n\nconst body = item.emailBody || item.snippet || item.body || item.text || \"\";\nconst imgs = [...body.matchAll(/https?:\\/\\/[^\\s\"<>]+\\.(?:jpg|jpeg|png|gif|webp|bmp)/gi)].map(m => m[0]);\n\nif (imgs.length === 0) {\n  return [{ json: { image_url: null, skipped: true } }];\n}\n\nreturn imgs.slice(0, 3).map(url => ({ json: { image_url: url, skipped: false } }));"
+      },
+      "id": "507c0e1c-3a77-4e45-853e-2c79ab3e9e1b",
+      "name": "Extract Images",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1296,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/v1/check-image",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.skipped ? JSON.stringify({image_url: \"http://placeholder\", skipped: true}) : JSON.stringify({image_url: $json.image_url}) }}",
+        "options": {
+          "response": {
+            "response": {}
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "6569bc46-d296-44c2-b65e-4d16cf327207",
+      "name": "Check Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1488,
+        800
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "JOhA14fvHQQt4THX",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "path": "cyberastryx-scan",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        176,
+        816
+      ],
+      "id": "288affb1-a846-4254-b75f-23ea5ce7019e",
+      "name": "Webhook",
+      "webhookId": "1efc6dd6-2291-4fc1-b53e-ffc7d701bd93"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2032,
+        816
+      ],
+      "id": "ac087ac6-7163-4de7-b762-e5ddbbe9a1bf",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "limit": 10,
+        "filters": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        416,
+        800
+      ],
+      "name": "Get many messages",
+      "id": "aa3ad523-2d9e-4650-8e20-8fd0be0f791c",
+      "webhookId": "90979e67-2798-4def-9bea-d4b4a71846fd",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "VIL8CE6Eem1JGNBo",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const edit = $('Edit Fields').all();\n\nreturn $input.all().map((item, i) => {\n  const src = edit[i]?.json || {};\n  const m = item.json || {};\n\n  if (!m.label && !src.subject) return null;\n\n  let verdict = 'CLEAN';\n  let confidence = m.confidence || 0;\n  let risk = Math.round((m.spam_prob || 0) * 100);\n\n  if (m.label === 'SPAM') {\n    const cat = src.gmailCategory || '';\n    const bulk = String(src.isNoReply) === 'true';\n    const legit = cat.length > 0 && bulk;\n    verdict = (legit && m.spam_prob < 0.99) ? 'SUSPICIOUS' : 'SPAM';\n  }\n\n  return {\n    json: {\n      id: src.id || '',\n      subject: src.subject || '(no subject)',\n      from: src.from || '',\n      snippet: (src.snippet || '').slice(0, 160),\n      verdict,\n      confidence,\n      risk,\n      date: src.internalDate ? new Date(Number(src.internalDate)).toISOString() : new Date().toISOString()\n    },\n    pairedItem: { item: i }\n  };\n}).filter(Boolean);"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1824,
+        784
+      ],
+      "id": "a31600f4-b92c-492b-8a75-8a9bc27c52ce",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a message": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Classify Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Extract URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Email": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Add label to message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Add label to message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add label to message": {
+      "main": [
+        [
+          {
+            "node": "Remove label from message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract URLs": {
+      "main": [
+        [
+          {
+            "node": "Check Link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Link": {
+      "main": [
+        [
+          {
+            "node": "Extract Images",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Images": {
+      "main": [
+        [
+          {
+            "node": "Check Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Image": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get many messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many messages": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "d66f25c4-c8a7-4881-8520-f329d8619012",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "1e59545af9223848b6ac39d8076e8c415f8644ffea9a9f767dfa8ea56287d3b9"
+  },
+  "id": "fCFuwKSil5N47SZ9",
+  "tags": []
+}
