@@ -31,7 +31,7 @@ python generate_key.py --name n8n-workflow
 
 Output:
 ```
-Key : sk-spam-a1b2c3d4e5f6...
+Key : sk-spam-**********************
 ```
 
 Save this — you'll paste it into n8n.
