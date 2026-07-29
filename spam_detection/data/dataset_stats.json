@@ -1,0 +1,13 @@
+{
+  "total": 5156,
+  "ham": 4515,
+  "spam": 641,
+  "sources": {
+    "count": {
+      "sms_spam_collection": 5156
+    },
+    "spam": {
+      "sms_spam_collection": 641
+    }
+  }
+}

@@ -1,0 +1,12 @@
+api_keys.json
+*.key
+.env
+data/*.csv
+outputs/
+__pycache__/
+*.pyc
+.vscode/
+node_modules/
+*.log
+Thumbs.db
+desktop.ini

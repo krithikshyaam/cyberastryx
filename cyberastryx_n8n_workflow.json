@@ -1,0 +1,123 @@
+{
+  "name": "Cyberastryx Gmail Scanner",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "cyberastryx-scan",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "cyberastryx-scan"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": "={{ $request.query.limit || 10 }}",
+        "filters": {
+          "labelIds": ["={{ $request.query.filter || 'INBOX' }}"]
+        },
+        "options": {
+          "format": "resolved"
+        }
+      },
+      "id": "a1b2c3d4-0002-0002-0002-000000000002",
+      "name": "Get Gmail Messages",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Cyberastryx: classify each email via local API\nconst emails = $input.all();\nconst results = [];\n\nfor (const item of emails) {\n  const email = item.json;\n  \n  // Build text for the model\n  const text = [\n    'Subject: ' + (email.subject || ''),\n    'From: ' + (email.from || ''),\n    (email.text || email.snippet || email.body || '')\n  ].join('\\n\\n').slice(0, 4000);\n  \n  let verdict = 'UNKNOWN';\n  let confidence = 0;\n  let signals = [];\n  \n  try {\n    const res = await fetch('http://127.0.0.1:8000/predict', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({ text })\n    });\n    const data = await res.json();\n    verdict = (data.prediction || data.label || data.verdict || 'UNKNOWN').toUpperCase();\n    if (verdict === 'HAM') verdict = 'CLEAN';\n    confidence = data.confidence || 0;\n    signals = data.signals || [];\n  } catch(e) {\n    verdict = 'ERROR';\n  }\n  \n  results.push({\n    json: {\n      id: email.id || '',\n      subject: email.subject || '(no subject)',\n      from: email.from || '',\n      snippet: (email.text || email.snippet || '').slice(0, 200),\n      date: email.date || new Date().toISOString(),\n      verdict,\n      confidence,\n      signals\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "a1b2c3d4-0003-0003-0003-000000000003",
+      "name": "Classify Emails",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "emails",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0004-0004-0004-000000000004",
+      "name": "Aggregate",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"emails\": $json.emails, \"count\": $json.emails.length, \"scanned_at\": new Date().toISOString() } }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "a1b2c3d4-0005-0005-0005-000000000005",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{"node": "Get Gmail Messages", "type": "main", "index": 0}]
+      ]
+    },
+    "Get Gmail Messages": {
+      "main": [
+        [{"node": "Classify Emails", "type": "main", "index": 0}]
+      ]
+    },
+    "Classify Emails": {
+      "main": [
+        [{"node": "Aggregate", "type": "main", "index": 0}]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [{"node": "Respond to Webhook", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "cyberastryx-v1",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cyberastryx"
+  },
+  "tags": []
+}
