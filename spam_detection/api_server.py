@@ -71,7 +71,22 @@ def save_api_keys(keys: dict):
     tmp_path = API_KEYS_FILE + ".tmp"
     with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(keys, f, indent=2)
-    os.replace(tmp_path, API_KEYS_FILE)
+    # On Windows the swap fails if anything else has the file open even for a
+    # moment — OneDrive sync, an editor tab, antivirus. That contention is
+    # transient, so retry briefly rather than failing the request.
+    for attempt in range(10):
+        try:
+            os.replace(tmp_path, API_KEYS_FILE)
+            return
+        except PermissionError:
+            if attempt == 9:
+                log.warning(f"Could not update {API_KEYS_FILE}; usage count not saved.")
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+                return
+            time.sleep(0.02)
 
 def generate_api_key(name: str = "default") -> str:
     """Generate and persist a new API key."""
