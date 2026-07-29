@@ -25,6 +25,7 @@ import uuid
 import time
 import argparse
 import logging
+import threading
 from datetime import datetime
 from typing import Optional
 
@@ -53,26 +54,36 @@ log = logging.getLogger("spam-api")
 # ── API Key store ─────────────────────────────────────────────────────────────
 API_KEYS_FILE = "api_keys.json"
 
+# Every authenticated request bumps a usage counter, and FastAPI runs the auth
+# dependency in a threadpool — so the read-modify-write below has to be held
+# under a lock, or concurrent requests read the file mid-write.
+_keys_lock = threading.RLock()
+
 def load_api_keys() -> dict:
     if os.path.exists(API_KEYS_FILE):
-        with open(API_KEYS_FILE) as f:
+        with open(API_KEYS_FILE, encoding="utf-8") as f:
             return json.load(f)
     return {}
 
 def save_api_keys(keys: dict):
-    with open(API_KEYS_FILE, "w") as f:
+    # Write to a sibling temp file and swap it in, so the key store is never
+    # observed truncated and a crash mid-write can't destroy it.
+    tmp_path = API_KEYS_FILE + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(keys, f, indent=2)
+    os.replace(tmp_path, API_KEYS_FILE)
 
 def generate_api_key(name: str = "default") -> str:
     """Generate and persist a new API key."""
-    keys = load_api_keys()
-    new_key = "sk-spam-" + uuid.uuid4().hex[:32]
-    keys[new_key] = {
-        "name": name,
-        "created": datetime.utcnow().isoformat(),
-        "requests": 0,
-    }
-    save_api_keys(keys)
+    with _keys_lock:
+        keys = load_api_keys()
+        new_key = "sk-spam-" + uuid.uuid4().hex[:32]
+        keys[new_key] = {
+            "name": name,
+            "created": datetime.utcnow().isoformat(),
+            "requests": 0,
+        }
+        save_api_keys(keys)
     log.info(f"Generated API key for '{name}': {new_key}")
     return new_key
 
@@ -80,16 +91,23 @@ def generate_api_key(name: str = "default") -> str:
 bearer_scheme = HTTPBearer(auto_error=False)
 
 def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
-    keys = load_api_keys()
-    if not keys:
-        # No keys configured → open access (dev mode)
-        return "dev"
-    if credentials is None or credentials.credentials not in keys:
-        raise HTTPException(status_code=401, detail="Invalid or missing API key.")
-    # Track usage
-    keys[credentials.credentials]["requests"] += 1
-    save_api_keys(keys)
-    return credentials.credentials
+    with _keys_lock:
+        try:
+            keys = load_api_keys()
+        except (json.JSONDecodeError, OSError) as e:
+            # Never fall through to dev mode here: an unreadable key store must
+            # not silently turn into open access.
+            log.error(f"Cannot read {API_KEYS_FILE}: {e}")
+            raise HTTPException(status_code=503, detail="API key store unreadable.")
+        if not keys:
+            # No keys configured → open access (dev mode)
+            return "dev"
+        if credentials is None or credentials.credentials not in keys:
+            raise HTTPException(status_code=401, detail="Invalid or missing API key.")
+        # Track usage
+        keys[credentials.credentials]["requests"] += 1
+        save_api_keys(keys)
+        return credentials.credentials
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
 
