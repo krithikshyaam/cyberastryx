@@ -56,7 +56,7 @@
     {
       "parameters": {
         "mode": "raw",
-        "jsonOutput": "={\n  \"id\": \"{{ $json.id }}\",\n  \"threadId\": \"{{ $json.threadId }}\",\n  \"subject\": \"{{ ($json.Subject || '').replace(/\"/g, \"'\") }}\",\n  \"from\": \"{{ ($json.From || '').replace(/\"/g, \"'\") }}\",\n  \"snippet\": \"{{ ($json.snippet || '').replace(/\"/g, \"'\").slice(0, 300) }}\",\n  \"internalDate\": \"{{ $json.internalDate }}\",\n  \"gmailCategory\": \"{{ ($json.labels || []).map(l => l.id).filter(i => i.indexOf('CATEGORY_') === 0).join(',') }}\",\n  \"isNoReply\": \"{{ /no-?reply|noreply|notifications?@|updates?@|hello@|info@/i.test($json.From || '') }}\",\n  \"emailText\": \"Subject: {{ ($json.Subject || '').replace(/\"/g, \"'\") }} From: {{ ($json.From || '').replace(/\"/g, \"'\") }} {{ ($json.snippet || '').replace(/\"/g, \"'\").slice(0, 2000) }}\"\n}",
+        "jsonOutput": "={\n  \"id\": \"{{ $json.id }}\",\n  \"threadId\": \"{{ $json.threadId }}\",\n  \"subject\": \"{{ ($json.Subject || '').replace(/\"/g, \"'\") }}\",\n  \"from\": \"{{ ($json.From || '').replace(/\"/g, \"'\") }}\",\n  \"snippet\": \"{{ ($json.snippet || '').replace(/\"/g, \"'\").slice(0, 300) }}\",\n  \"internalDate\": \"{{ $json.internalDate }}\",\n  \"gmailCategory\": \"{{ ($json.labels || []).map(l => l.id).filter(i => i.indexOf('CATEGORY_') === 0).join(',') }}\",\n  \"isNoReply\": \"{{ /no-?reply|noreply|do-?not-?reply|notifications?@|updates?@|alerts?@|hello@|hi@|info@|news(?:letter)?@|mailer@|marketing@|support@|@(?:e|em|mail|email|mailer|mailing|news|newsletter|hello|hi|info|updates?|notifications?|notify|marketing|campaign|reply|send|mkt|crm|msg)\\./i.test($json.From || '') }}\",\n  \"emailText\": \"Subject: {{ ($json.Subject || '').replace(/\"/g, \"'\") }} From: {{ ($json.From || '').replace(/\"/g, \"'\") }} {{ ($json.snippet || '').replace(/\"/g, \"'\").slice(0, 2000) }}\"\n}",
         "includeOtherFields": true,
         "options": {}
       },
@@ -377,8 +377,11 @@
     {
       "parameters": {
         "operation": "getAll",
-        "limit": 10,
-        "filters": {}
+        "limit": "={{ Number($json.query.limit) || 10 }}",
+        "filters": {
+          "includeSpamTrash": "={{ ($json.query.filter || 'INBOX') === 'SPAM' }}",
+          "labelIds": "={{ [$json.query.filter || 'INBOX'] }}"
+        }
       },
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
