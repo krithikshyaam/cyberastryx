@@ -339,10 +339,23 @@ def check_image(
 
 
 @app.get("/v1/keys")
-def list_keys(request: Request):
-    """List all API keys (admin only — protect this in production)."""
+def list_keys(api_key: str = Depends(verify_api_key)):
+    """
+    List API keys in masked form. Requires a valid key.
+
+    Never returns a full key: CORS is open, so an unauthenticated version of
+    this endpoint let any page the user visited read the key store outright.
+    """
     keys = load_api_keys()
-    return {k: {**v, "key_preview": k[:16] + "..."} for k, v in keys.items()}
+    return {
+        f"{k[:12]}...{k[-4:]}": {
+            "name"    : v.get("name"),
+            "created" : v.get("created"),
+            "requests": v.get("requests"),
+            "active"  : v.get("active", True),
+        }
+        for k, v in keys.items()
+    }
 
 
 # ── CLI entry point ───────────────────────────────────────────────────────────

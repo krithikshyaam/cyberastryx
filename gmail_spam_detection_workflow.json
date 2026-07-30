@@ -110,17 +110,6 @@
       }
     },
     {
-      "parameters": {},
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3.2,
-      "position": [
-        1648,
-        640
-      ],
-      "id": "e10f157c-5614-4834-8e09-1476e8eccab1",
-      "name": "Merge"
-    },
-    {
       "parameters": {
         "conditions": {
           "options": {
@@ -238,112 +227,6 @@
     },
     {
       "parameters": {
-        "jsCode": "return $input.all().map((item, i) => {\n  const j = item.json;\n  const text = (j.snippet || '') + ' ' + (j.emailText || '') + ' ' + (j.subject || '');\n  const urls = [...text.matchAll(/https?:\\/\\/[^\\s\"'<>\\)]+/g)].map(m => m[0]);\n  const unique = [...new Set(urls)].slice(0, 3);\n\n  return {\n    json: {\n      id: j.id || '',\n      url: unique[0] || null,\n      urls: unique,\n      urlCount: unique.length,\n      skipped: unique.length === 0\n    },\n    pairedItem: { item: i }\n  };\n});"
-      },
-      "id": "6efd3e42-b688-42e1-90b7-42b034804064",
-      "name": "Extract URLs",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        912,
-        832
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "http://127.0.0.1:8000/v1/check-link",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ $json.skipped ? JSON.stringify({url: \"http://skip\", skipped: true}) : JSON.stringify({url: $json.url}) }}",
-        "options": {
-          "response": {
-            "response": {}
-          },
-          "timeout": 15000
-        }
-      },
-      "id": "f39b931c-2658-4dec-96d0-f70db3511160",
-      "name": "Check Link",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1104,
-        816
-      ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "JOhA14fvHQQt4THX",
-          "name": "Header Auth account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "const item = $input.first().json;\n\n// If previous step was skipped, pass skip forward\nif (item.skipped) {\n  return [{ json: { image_url: null, skipped: true } }];\n}\n\nconst body = item.emailBody || item.snippet || item.body || item.text || \"\";\nconst imgs = [...body.matchAll(/https?:\\/\\/[^\\s\"<>]+\\.(?:jpg|jpeg|png|gif|webp|bmp)/gi)].map(m => m[0]);\n\nif (imgs.length === 0) {\n  return [{ json: { image_url: null, skipped: true } }];\n}\n\nreturn imgs.slice(0, 3).map(url => ({ json: { image_url: url, skipped: false } }));"
-      },
-      "id": "507c0e1c-3a77-4e45-853e-2c79ab3e9e1b",
-      "name": "Extract Images",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1296,
-        800
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "http://127.0.0.1:8000/v1/check-image",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ $json.skipped ? JSON.stringify({image_url: \"http://placeholder\", skipped: true}) : JSON.stringify({image_url: $json.image_url}) }}",
-        "options": {
-          "response": {
-            "response": {}
-          },
-          "timeout": 30000
-        }
-      },
-      "id": "6569bc46-d296-44c2-b65e-4d16cf327207",
-      "name": "Check Image",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1488,
-        800
-      ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "JOhA14fvHQQt4THX",
-          "name": "Header Auth account"
-        }
-      }
-    },
-    {
-      "parameters": {
         "path": "cyberastryx-scan",
         "responseMode": "responseNode",
         "options": {
@@ -444,27 +327,11 @@
             "node": "Classify Email",
             "type": "main",
             "index": 0
-          },
-          {
-            "node": "Extract URLs",
-            "type": "main",
-            "index": 0
           }
         ]
       ]
     },
     "Classify Email": {
-      "main": [
-        [
-          {
-            "node": "Merge",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Merge": {
       "main": [
         [
           {
@@ -505,50 +372,6 @@
             "node": "Remove label from message",
             "type": "main",
             "index": 0
-          }
-        ]
-      ]
-    },
-    "Extract URLs": {
-      "main": [
-        [
-          {
-            "node": "Check Link",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Check Link": {
-      "main": [
-        [
-          {
-            "node": "Extract Images",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Extract Images": {
-      "main": [
-        [
-          {
-            "node": "Check Image",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Check Image": {
-      "main": [
-        [
-          {
-            "node": "Merge",
-            "type": "main",
-            "index": 1
           }
         ]
       ]
