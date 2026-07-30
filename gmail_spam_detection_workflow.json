@@ -132,7 +132,7 @@
           "conditions": [
             {
               "id": "030c7c0c-163b-4ee2-8b72-442ada8588b5",
-              "leftValue": "={{ (() => { const m = $json; const src = $('Edit Fields').item.json; const cat = src.gmailCategory || ''; const bulk = String(src.isNoReply) === 'true'; const legit = cat.length > 0 && bulk; return m.label === \"SPAM\" && m.confidence >= 0.85 && !(legit && m.spam_prob < 0.99) && $execution.mode !== 'webhook'; })() }}",
+              "leftValue": "={{ (() => { const m = $json; const src = $('Edit Fields').item.json; const legit = (src.gmailCategory || '').length > 0; return m.label === \"SPAM\" && m.confidence >= 0.85 && !(legit && m.spam_prob < 0.99) && $execution.mode !== 'webhook'; })() }}",
               "rightValue": "=true",
               "operator": {
                 "type": "boolean",
@@ -401,7 +401,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const edit = $('Edit Fields').all();\n\nreturn $input.all().map((item, i) => {\n  const src = edit[i]?.json || {};\n  const m = item.json || {};\n\n  if (!m.label && !src.subject) return null;\n\n  let verdict = 'CLEAN';\n  let confidence = m.confidence || 0;\n  let risk = Math.round((m.spam_prob || 0) * 100);\n\n  if (m.label === 'SPAM') {\n    const cat = src.gmailCategory || '';\n    const bulk = String(src.isNoReply) === 'true';\n    const legit = cat.length > 0 && bulk;\n    verdict = (legit && m.spam_prob < 0.99) ? 'SUSPICIOUS' : 'SPAM';\n  }\n\n  return {\n    json: {\n      id: src.id || '',\n      subject: src.subject || '(no subject)',\n      from: src.from || '',\n      snippet: (src.snippet || '').slice(0, 160),\n      verdict,\n      confidence,\n      risk,\n      date: src.internalDate ? new Date(Number(src.internalDate)).toISOString() : new Date().toISOString()\n    },\n    pairedItem: { item: i }\n  };\n}).filter(Boolean);"
+        "jsCode": "const edit = $('Edit Fields').all();\n\nreturn $input.all().map((item, i) => {\n  const src = edit[i]?.json || {};\n  const m = item.json || {};\n\n  if (!m.label && !src.subject) return null;\n\n  let verdict = 'CLEAN';\n  let confidence = m.confidence || 0;\n  let risk = Math.round((m.spam_prob || 0) * 100);\n\n  if (m.label === 'SPAM') {\n    // Gmail already declined to file this as spam. Trust that over our own\n    // classifier, which flags roughly two in five legitimate emails.\n    const legit = (src.gmailCategory || '').length > 0;\n    verdict = (legit && m.spam_prob < 0.99) ? 'SUSPICIOUS' : 'SPAM';\n  }\n\n  return {\n    json: {\n      id: src.id || '',\n      subject: src.subject || '(no subject)',\n      from: src.from || '',\n      snippet: (src.snippet || '').slice(0, 160),\n      verdict,\n      confidence,\n      risk,\n      date: src.internalDate ? new Date(Number(src.internalDate)).toISOString() : new Date().toISOString()\n    },\n    pairedItem: { item: i }\n  };\n}).filter(Boolean);"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
